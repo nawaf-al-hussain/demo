@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>The Game of Life</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;
+     min-height:100vh;font-family:'Segoe UI',sans-serif;color:#fff;overflow:hidden}
+#gameCanvas{display:block;image-rendering:pixelated;cursor:pointer;
+            border:2px solid #333;max-width:100vw;max-height:100vh}
+#ui{position:fixed;inset:0;pointer-events:none}
+/* All UI panels use pointer-events:auto when visible */
+.panel{position:absolute;background:rgba(0,0,0,.92);border:2px solid #c9a84c;
+       border-radius:10px;padding:16px;pointer-events:auto;display:none;
+       font-size:13px;line-height:1.6;max-width:300px;z-index:100}
+.panel.show{display:block}
+.panel h3{color:#c9a84c;font-size:16px;margin-bottom:10px;font-family:'Georgia',serif}
+.panel p{color:#ddd;margin-bottom:8px}
+.btn{display:inline-block;background:#c9a84c;color:#1a1a1a;border:none;border-radius:6px;
+     padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;margin:4px 2px;
+     transition:all .15s}
+.btn:hover{background:#e8c96a;transform:translateY(-1px)}
+.btn.red{background:#c94c4c;color:#fff}
+.btn.blue{background:#4c8ec9;color:#fff}
+.btn.ghost{background:transparent;color:#c9a84c;border:1px solid #c9a84c}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none}
+#hud{position:absolute;top:0;left:0;right:0;height:40px;background:rgba(0,0,0,.8);
+     display:flex;align-items:center;padding:0 10px;gap:16px;pointer-events:none;
+     border-bottom:1px solid #333}
+.hud-player{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 8px;
+            border-radius:6px;border:1px solid transparent}
+.hud-player.active{border-color:#c9a84c;background:rgba(201,168,76,.15)}
+.hud-dot{width:10px;height:10px;border-radius:50%}
+.hud-cash{font-weight:700;color:#4caf50}
+.hud-cash.neg{color:#c94c4c}
+#msgbox{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+        background:rgba(0,0,0,.95);border:2px solid #c9a84c;border-radius:12px;
+        padding:20px 28px;text-align:center;pointer-events:auto;display:none;
+        min-width:260px;max-width:340px;z-index:200}
+#msgbox.show{display:block;animation:popIn .2s ease}
+@keyframes popIn{from{transform:translate(-50%,-50%) scale(.8);opacity:0}
+                  to{transform:translate(-50%,-50%) scale(1);opacity:1}}
+#msgbox h3{color:#c9a84c;font-family:'Georgia',serif;font-size:18px;margin-bottom:10px}
+#msgbox .msg-text{color:#ddd;font-size:13px;line-height:1.6;margin-bottom:14px}
+#msgbox .msg-btns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+#spinner-overlay{position:absolute;inset:0;background:rgba(0,0,0,.85);
+                 display:none;align-items:center;justify-content:center;
+                 flex-direction:column;gap:12px;z-index:300;pointer-events:auto}
+#spinner-overlay.show{display:flex}
+.spin-wheel{width:140px;height:140px;border-radius:50%;border:4px solid #c9a84c;
+            background:radial-gradient(circle,#2a2a1a,#1a1a0a);
+            display:flex;align-items:center;justify-content:center;
+            font-family:'Georgia',serif;font-size:64px;color:#e8c96a;
+            text-shadow:0 0 20px rgba(232,201,106,.6);position:relative}
+.spin-wheel::before{content:'';position:absolute;inset:-8px;border-radius:50%;
+                    border:2px dashed rgba(201,168,76,.3);animation:spinRing 4s linear infinite}
+@keyframes spinRing{to{transform:rotate(360deg)}}
+.power-bar-wrap{width:200px;height:16px;background:#1a1a1a;border:2px solid #444;
+                border-radius:8px;overflow:hidden;position:relative}
+.power-bar-fill{height:100%;background:linear-gradient(90deg,#4caf50,#c9a84c,#c94c4c);
+                transition:width .05s;border-radius:6px}
+.power-bar-label{font-size:12px;color:#888;text-align:center}
+#card-anim{position:absolute;pointer-events:none;display:none;z-index:400}
+#card-anim img{width:120px;height:160px;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.8);
+               animation:cardFlip .5s ease}
+@keyframes cardFlip{from{transform:rotateY(90deg) scale(.5);opacity:0}
+                     to{transform:rotateY(0) scale(1);opacity:1}}
+#log{position:absolute;bottom:8px;left:8px;right:8px;background:rgba(0,0,0,.7);
+     border:1px solid #333;border-radius:8px;padding:8px 10px;font-size:11px;
+     color:#888;max-height:60px;overflow:hidden;pointer-events:none}
+#log .entry{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+#log .entry:last-child{color:#ccc;border:none}
+/* Number picker for STW */
+#num-picker{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:10px 0}
+.num-btn{width:40px;height:40px;border-radius:8px;background:#1a1a1a;
+         border:2px solid #444;color:#ccc;font-size:18px;font-weight:700;
+         font-family:'Georgia',serif;cursor:pointer;transition:all .15s}
+.num-btn.sel{border-color:#c9a84c;color:#c9a84c;background:rgba(201,168,76,.15)}
+#wager-slider{width:100%;margin:8px 0}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;background:#333;
+                  border-radius:2px;outline:none;border:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;
+                                         background:#c9a84c;border-radius:50%;cursor:pointer}
+/* Setup screen */
+#setup{position:absolute;inset:0;background:#0a0a0a;display:flex;flex-direction:column;
+       align-items:center;justify-content:center;gap:20px;padding:24px;z-index:500;
+       pointer-events:auto}
+#setup.hide{display:none}
+.setup-title{text-align:center}
+.setup-title img{max-width:240px;margin-bottom:8px}
+.setup-title h1{font-family:'Georgia',serif;font-size:36px;color:#c9a84c;
+                text-shadow:0 0 30px rgba(201,168,76,.3)}
+.setup-card{background:#111;border:1px solid #333;border-radius:12px;
+            padding:24px;width:100%;max-width:360px}
+.setup-card h3{color:#c9a84c;margin-bottom:16px;font-size:16px}
+.player-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.player-row .dot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
+.player-row input{flex:1;background:#1a1a1a;border:1px solid #333;
+                   border-radius:6px;color:#fff;padding:8px 10px;font-size:13px;outline:none}
+.player-row input:focus{border-color:#c9a84c}
+.player-row input:disabled{opacity:.4}
+.player-toggle{background:none;border:1px solid #444;border-radius:6px;
+               padding:4px 10px;color:#666;font-size:11px;cursor:pointer}
+.player-toggle.on{border-color:#4caf50;color:#4caf50}
+/* Endgame */
+#endgame{position:absolute;inset:0;background:rgba(0,0,0,.95);
+          display:none;align-items:center;justify-content:center;z-index:600;
+          pointer-events:auto;flex-direction:column;gap:16px;padding:24px}
+#endgame.show{display:flex}
+.rank-row{display:flex;align-items:center;gap:16px;background:#111;
+          border:1px solid #333;border-radius:10px;padding:16px;width:100%;max-width:400px}
+.rank-row.first{border-color:#c9a84c;background:rgba(201,168,76,.05)}
+.rank-num{font-family:'Georgia',serif;font-size:28px;width:36px;color:#666}
+.rank-row.first .rank-num{color:#c9a84c}
+.rank-info{flex:1}
+.rank-name{font-size:16px;font-weight:700}
+.rank-worth{font-family:'Georgia',serif;font-size:20px;color:#c9a84c}
+.rank-detail{font-size:11px;color:#666;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ── SETUP SCREEN ───────────────────────────────────── -->
+<div id="setup">
+  <div class="setup-title">
+    <img id="splash-img" src="" alt="The Game of Life">
+    <h1 id="splash-title" style="display:none">THE GAME OF LIFE</h1>
+  </div>
+  <div class="setup-card">
+    <h3>Players (2–4)</h3>
+    <div class="player-row">
+      <div class="dot" style="background:#c94c4c"></div>
+      <input id="p0name" type="text" value="Player 1" maxlength="12">
+    </div>
+    <div class="player-row">
+      <div class="dot" style="background:#4c8ec9"></div>
+      <input id="p1name" type="text" value="Player 2" maxlength="12">
+    </div>
+    <div class="player-row">
+      <div class="dot" style="background:#4caf50"></div>
+      <input id="p2name" type="text" value="" maxlength="12" placeholder="Player 3 (optional)" disabled>
+      <button class="player-toggle" id="tog2" onclick="togglePlayer(2)">+ Add</button>
+    </div>
+    <div class="player-row">
+      <div class="dot" style="background:#c9a84c"></div>
+      <input id="p3name" type="text" value="" maxlength="12" placeholder="Player 4 (optional)" disabled>
+      <button class="player-toggle" id="tog3" onclick="togglePlayer(3)">+ Add</button>
+    </div>
+  </div>
+  <button class="btn" style="font-size:16px;padding:12px 40px" onclick="startGame()">▶ Start Game</button>
+  <p style="color:#444;font-size:11px">Pass & Play — take turns on the same device</p>
+</div>
+
+<!-- ── GAME CANVAS ────────────────────────────────────── -->
+<canvas id="gameCanvas" width="320" height="400"></canvas>
+
+<!-- ── HUD ───────────────────────────────────────────── -->
+<div id="ui">
+  <div id="hud"></div>
+
+  <!-- Main message/choice box -->
+  <div id="msgbox">
+    <h3 id="msg-title"></h3>
+    <div class="msg-text" id="msg-text"></div>
+    <div class="msg-btns" id="msg-btns"></div>
+  </div>
+
+  <!-- Spinner overlay -->
+  <div id="spinner-overlay">
+    <div class="spin-wheel" id="spin-num">—</div>
+    <div class="power-bar-wrap">
+      <div class="power-bar-fill" id="power-fill" style="width:0%"></div>
+    </div>
+    <div class="power-bar-label">Tap/Click to spin!</div>
+    <button class="btn" id="spin-btn" onclick="doSpin()">SPIN</button>
+  </div>
+
+  <!-- Event log -->
+  <div id="log"></div>
+
+  <!-- Card animation container -->
+  <div id="card-anim"><img id="card-img" src=""></div>
+
+  <!-- Endgame screen -->
+  <div id="endgame">
+    <h2 style="font-family:'Georgia',serif;color:#c9a84c;font-size:28px">🏆 Final Results</h2>
+    <div id="endgame-ranks"></div>
+    <button class="btn" style="margin-top:8px" onclick="location.reload()">Play Again</button>
+  </div>
+</div>
+
+<script src="assets_bundle.js"></script>
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+//  CONSTANTS & DATA
+// ═══════════════════════════════════════════════════════
+
+const PLAYER_COLORS = ['#c94c4c','#4c8ec9','#4caf50','#c9a84c'];
+const PLAYER_PEGS   = ['personPink.png','personBlue.png','personPink.png','personBlue.png'];
+
+const CAREERS = [
+  {id:0,name:'Veterinarian',   college:false,salary:30000,maxSalary:60000, raise:10000},
+  {id:1,name:'Entertainer',    college:false,salary:50000,maxSalary:-1,    raise:20000},
+  {id:2,name:'Police Officer', college:false,salary:40000,maxSalary:70000, raise:15000,special:'cop'},
+  {id:3,name:'Mechanic',       college:false,salary:30000,maxSalary:60000, raise:10000},
+  {id:4,name:'Salesperson',    college:false,salary:20000,maxSalary:50000, raise:5000},
+  {id:5,name:'Athlete',        college:false,salary:60000,maxSalary:-1,    raise:25000},
+  {id:6,name:'Hair Stylist',   college:true, salary:40000,maxSalary:70000, raise:15000},
+  {id:7,name:'Teacher',        college:true, salary:50000,maxSalary:80000, raise:20000},
+  {id:8,name:'Accountant',     college:true, salary:70000,maxSalary:110000,raise:30000},
+  {id:9,name:'Lawyer',         college:true, salary:80000,maxSalary:120000,raise:35000},
+  {id:10,name:'Computer Designer',college:true,salary:90000,maxSalary:-1,  raise:40000},
+  {id:11,name:'Doctor',        college:true, salary:100000,maxSalary:-1,   raise:45000},
+];
+const HOUSES = [
+  {id:0,name:'Mobile Home',            starter:true, buy:80000, sell:100000},
+  {id:1,name:'Condo',                  starter:true, buy:100000,sell:105000},
+  {id:2,name:'Log Cabin',              starter:true, buy:120000,sell:140000},
+  {id:3,name:'Ranch Style',            starter:true, buy:140000,sell:160000},
+  {id:4,name:'Small Cape',             starter:true, buy:160000,sell:180000},
+  {id:5,name:'Tudor Style',            starter:true, buy:180000,sell:200000},
+  {id:6,name:'Double Wide+RV',         starter:false,buy:300000,sell:-1},
+  {id:7,name:'Executive Cape',         starter:false,buy:400000,sell:-1},
+  {id:8,name:'Modern Victorian',       starter:false,buy:500000,sell:-1},
+  {id:9,name:'Luxury Mountain Retreat',starter:false,buy:600000,sell:-1},
+  {id:10,name:'Penthouse Suite',       starter:false,buy:700000,sell:-1},
+  {id:11,name:'Mansion',               starter:false,buy:800000,sell:-1},
+];
+const ACTION_CARDS = [
+  {text:'Rent apartment. Pay $5,000.',               type:'pay',   amount:5000},
+  {text:'Inheritance! Collect $20,000.',             type:'collect',amount:20000},
+  {text:'Snowboarding accident! Pay $5,000.',        type:'pay',   amount:5000},
+  {text:'Win a race! Collect $10,000.',              type:'collect',amount:10000},
+  {text:'Wedding reception! Pay $20,000.',           type:'pay',   amount:20000},
+  {text:'Car accident. Pay $10,000.',                type:'pay',   amount:10000},
+  {text:'Job relocation. Pay $20,000.',              type:'pay',   amount:20000},
+  {text:'Win Lottery! Collect $50,000.',             type:'collect',amount:50000},
+  {text:'Lose your job. Take new career card.',      type:'career_change'},
+  {text:'Buy flat-screen plasma TV. Pay $5,000.',   type:'pay',   amount:5000},
+  {text:'Furnish baby\'s room. Pay $5,000.',        type:'pay',   amount:5000},
+  {text:'Win the Ultimate Idol TV show! Collect $100,000.',type:'collect',amount:100000},
+  {text:'Get best seats at the big game. Pay $20,000.',type:'pay',amount:20000},
+  {text:'LAWSUIT! Sue another player for $100,000.',type:'lawsuit'},
+  {text:'Spin to Win!',                              type:'stw_move'},
+  {text:'House flooded. Pay $40,000.',               type:'pay',   amount:40000},
+  {text:'Take double course load. Spin again.',      type:'spin_again'},
+  {text:'Upgrade computer. Pay $10,000.',            type:'pay',   amount:10000},
+  {text:'Career change OR Get $20,000 Pay Raise.',   type:'career_or_raise',amount:20000},
+  {text:'Win on TV game show. Collect $100,000.',    type:'collect',amount:100000},
+  {text:'Art auction! Pay $20,000.',                 type:'pay',   amount:20000},
+  {text:'Find buried treasure! Collect $500,000.',   type:'collect',amount:500000},
+  {text:'Sports camp for kids. Pay $5,000 per child.',type:'pay_child',perChild:5000,base:0},
+  {text:'Donate to African orphans. Pay $40,000.',   type:'pay',   amount:40000},
+  {text:'Buy an SUV. Pay $40,000.',                  type:'pay',   amount:40000},
+  {text:'TV dance show winner! Collect $100,000.',   type:'collect',amount:100000},
+  {text:'Summer school. Pay $5,000 per child.',      type:'pay_child',perChild:5000,base:0},
+  {text:'Buy home gym. Pay $30,000.',                type:'pay',   amount:30000},
+  {text:'Buy foreign sports car! Pay $30,000.',      type:'pay',   amount:30000},
+  {text:'Open daycare! Others pay you $5,000 per child.',type:'daycare'},
+  {text:'Get the family physicals! Pay $5,000.',     type:'pay',   amount:5000},
+  {text:'Buy lakeside cabin. Pay $120,000.',         type:'pay',   amount:120000},
+  {text:'Win Nobel Prize. Collect $100,000.',        type:'collect',amount:100000},
+  {text:'Tornado hits house! Pay $125,000.',         type:'pay',   amount:125000},
+  {text:'Write best-selling book. Collect $200,000.',type:'collect',amount:200000},
+  {text:'College for children. Pay $50,000 per child.',type:'pay_child',perChild:50000,base:0},
+  {text:'Redecorate your home. Pay $80,000.',        type:'pay',   amount:80000},
+  {text:'Sponsor sports tournament. Pay $35,000.',   type:'pay',   amount:35000},
+  {text:'Have cosmetic surgery. Pay $100,000.',      type:'pay',   amount:100000},
+  {text:'Sponsor public arts exhibit. Pay $125,000.',type:'pay',   amount:125000},
+  {text:'Hire Maid & Butler. Pay $65,000.',          type:'pay',   amount:65000},
+  {text:'Have life saving operation. Pay $50,000.',  type:'pay',   amount:50000},
+  {text:'Take a Share the Wealth Card.',             type:'gain_stw'},
+  {text:'Pay Day. $10,000 Pay Raise.',               type:'raise', amount:10000},
+  {text:'Scholarship! Collect $20,000.',             type:'collect',amount:20000},
+  {text:'Part-time job. Collect $10,000.',           type:'collect',amount:10000},
+  {text:'Spring break in Florida. Pay $5,000.',      type:'pay',   amount:5000},
+  {text:'Final tests & term paper. Miss Next Turn.', type:'miss_turn'},
+  {text:'Take family cruise. Pay $25,000+$5,000/child.',type:'pay_child',perChild:5000,base:25000},
+  {text:'Take family on theme park vacation. Pay $25,000+$5,000/child.',type:'pay_child',perChild:5000,base:25000},
+];
+const STW_NAMES = ['Pay Card','Collect Card','Exemption','Spin×2','Spin×4'];
+const STW_ICONS = ['💸','💰','🛡','🎯','⭐'];
+
+// ═══════════════════════════════════════════════════════
+//  ASSET LOADER
+// ═══════════════════════════════════════════════════════
+const imgs = {}, loadedCount = {n:0};
+const totalImgs = Object.keys(ASSETS).filter(k=>k.endsWith('.png')).length;
+
+function loadAssets() {
+  return new Promise(resolve => {
+    let done = 0, total = 0;
+    for (const [key, dataUrl] of Object.entries(ASSETS)) {
+      if (!key.endsWith('.png')) continue;
+      total++;
+      const img = new Image();
+      img.onload = () => { done++; if(done===total) resolve(); };
+      img.onerror = () => { done++; if(done===total) resolve(); };
+      img.src = dataUrl;
+      imgs[key] = img;
+    }
+    if (total === 0) resolve();
+  });
+}
+
+// Set splash image
+function setupSplash() {
+  const splashImg = document.getElementById('splash-img');
+  if (imgs['splash_b2.png']) {
+    splashImg.src = imgs['splash_b2.png'].src;
+    splashImg.style.display = 'block';
+  } else {
+    splashImg.style.display = 'none';
+    document.getElementById('splash-title').style.display = 'block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  AUDIO — Web Audio API MIDI player (simple, no library needed)
+// ═══════════════════════════════════════════════════════
+let audioCtx = null;
+let soundEnabled = true;
+
+// Sound index map (from source code analysis)
+const SOUND_MAP = {
+  spin: 0, land: 1, collect: 2, pay: 3, baby: 4,
+  married: 5, card: 6, ui: 7, win: 8, retire: 9,
+  invest: 10, stw: 11, lawsuit: 12, career: 13,
+  house: 14, music_title: 15, music_game: 16,
+  promotion: 17, fanfare: 18, gameover: 19
+};
+
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+// Simple MIDI-to-audio: play a short beep pattern based on sound index
+// We use decoded MIDI data URIs — browsers can play MIDI via Audio element
+let currentBgm = null;
+function playSound(idx) {
+  if (!soundEnabled) return;
+  try {
+    ensureAudio();
+    const key = `sound_${String(idx).padStart(2,'0')}.mid`;
+    const dataUrl = ASSETS[key];
+    if (!dataUrl) return;
+    const audio = new Audio(dataUrl);
+    audio.volume = 0.6;
+    audio.play().catch(()=>{});
+  } catch(e) {}
+}
+
+function playBgm(idx) {
+  if (!soundEnabled) return;
+  stopBgm();
+  try {
+    ensureAudio();
+    const key = `sound_${String(idx).padStart(2,'0')}.mid`;
+    const dataUrl = ASSETS[key];
+    if (!dataUrl) return;
+    currentBgm = new Audio(dataUrl);
+    currentBgm.loop = true;
+    currentBgm.volume = 0.4;
+    currentBgm.play().catch(()=>{});
+  } catch(e) {}
+}
+
+function stopBgm() {
+  if (currentBgm) { try { currentBgm.pause(); } catch(e) {} currentBgm = null; }
+}
+
+// ═══════════════════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════════════════
+let G = null; // game state object
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+function rnd(n) { return Math.floor(Math.random()*n); }
+function spin() { return rnd(10)+1; }
+function drawFrom(deck) { return deck.length ? deck.splice(rnd(deck.length),1)[0] : null; }
+function dealSTW(n=3) {
+  const r=[]; for(let i=0;i<n;i++) r.push(rnd(5)); return r;
+}
+function buildLifeTiles() {
+  const v=[];
+  for(let i=0;i<7;i++) v.push(10000);
+  for(let i=0;i<6;i++) v.push(20000);
+  for(let i=0;i<5;i++) v.push(30000);
+  for(let i=0;i<4;i++) v.push(40000);
+  for(let i=0;i<3;i++) v.push(50000);
+  return shuffle(v);
+}
+
+function initGame(names) {
+  const tiles = buildLifeTiles();
+  G = {
+    phase: 'turn_order',
+    players: names.map((name,i)=>({
+      id:i, name, color:PLAYER_COLORS[i],
+      cash:0, position:0,
+      career:null, house:null,
+      college:false, loan:0,
+      married:false, children:0,
+      lifeTiles:[], stwCards:dealSTW(3),
+      investment:null, retired:false,
+      retiredAt:null, missTurn:false,
+      turnSpin:null, netWorth:0,
+      // car animation
+      cx:0, cy:0, targetX:0, targetY:0,
+    })),
+    currentIdx: 0,
+    careerDeckCollege:    shuffle(CAREERS.filter(c=>c.college).map(c=>({...c}))),
+    careerDeckNonCollege: shuffle(CAREERS.filter(c=>!c.college).map(c=>({...c}))),
+    houseDeckStarter:  shuffle(HOUSES.filter(h=>h.starter).map(h=>({...h}))),
+    houseDeckPremium:  shuffle(HOUSES.filter(h=>!h.starter).map(h=>({...h}))),
+    actionDeck: shuffle([...ACTION_CARDS]),
+    lifeTiles: tiles.slice(3),         // 22 in draw pile
+    estatesTiles: tiles.slice(0,3),    // 3 at Millionaire Estates
+    pending: null,
+    log: [],
+    spinAnimating: false,
+    powerBarVal: 0,
+    powerBarDir: 1,
+    powerBarRAF: null,
+    pendingSpinResolve: null,
+    boardScale: 1,
+    boardOffX: 0, boardOffY: 0,
+    camX: 0, camY: 0, camTargetX: 0, camTargetY: 0,
+    soundOn: true,
+    turnOrderLeft: names.length,
+  };
+  // Init car positions from board space 0
+  const sp0 = BOARD_DATA.spaces[0];
+  G.players.forEach(p => { p.cx = sp0.x; p.cy = sp0.y; p.targetX = sp0.x; p.targetY = sp0.y; });
+  addLog('Game started!');
+  renderHUD();
+  startTurnOrderPhase();
+}
+
+// ═══════════════════════════════════════════════════════
+//  LOGGING
+// ═══════════════════════════════════════════════════════
+function addLog(msg) {
+  G.log.unshift(msg);
+  if (G.log.length > 30) G.log.pop();
+  const el = document.getElementById('log');
+  el.innerHTML = G.log.slice(0,4).map((m,i)=>
+    `<div class="entry" style="opacity:${1-i*0.2}">${m}</div>`).join('');
+}
+function fmt(n) { return '$'+Math.abs(n).toLocaleString(); }
+
+// ═══════════════════════════════════════════════════════
+//  BOARD RENDERING
+// ═══════════════════════════════════════════════════════
+const canvas  = document.getElementById('gameCanvas');
+const ctx     = canvas.getContext('2d');
+let scale     = 1;
+let BSCALE    = 1.5; // board pixel scale from game units to canvas
+
+// Resize canvas to fit window
+function resizeCanvas() {
+  const maxW = window.innerWidth, maxH = window.innerHeight - 40;
+  const natW = 320 * BSCALE, natH = 236 * BSCALE + 40; // board + HUD approx
+  scale = Math.min(maxW / natW, maxH / natH, 2);
+  canvas.width  = Math.floor(natW);
+  canvas.height = Math.floor(natH);
+  canvas.style.width  = Math.floor(natW * scale) + 'px';
+  canvas.style.height = Math.floor(natH * scale) + 'px';
+}
+
+// Space type colors for space markers
+const SPACE_COLORS = {
+  PB:'#2d6a2d', TX:'#8b2020', LF:'#1a3d8a', LS:'#2d1a8a',
+  CB:'#1a6a3d', PD:'#6a6a10', BB:'#8a4a10', S2:'#8a1a8a',
+  PR:'#107070', CC:'#701070', GM:'#8a2060', BH:'#203a8a',
+  RT:'#8a6a10', PN:'#6a4a10', OC:'#4a6a10', SW:'#106a40',
+  SH:'#106a40', BR:'#404040', PC:'#6a3a10', LJ:'#103a8a',
+  MT:'#404040', NL:'#404040', EL:'#404040', B5:'#8a8a10',
+  BM:'#c9a84c',
+};
+const SPACE_LABELS = {
+  PB:'PAY', TX:'TAX', LF:'LIFE', LS:'LIFE★', CB:'BONUS',
+  PD:'PAY\nDAY', BB:'BABY', S2:'STW', PR:'PROMO', CC:'CAREER',
+  GM:'MARRY', BH:'HOUSE', RT:'RETIRE', PN:'PENSION', OC:'OCC',
+  SW:'STW+', SH:'GIVE', BR:'', PC:'FORK', LJ:'CARD',
+  MT:'MID', NL:'NIGHT', EL:'EARLY', B5:'B5', BM:'START',
+};
+
+// Camera: smooth follow active player
+let camX = 0, camY = 0;
+
+function boardToCanvas(bx, by) {
+  return {
+    x: (bx - camX) * BSCALE,
+    y: (by - camY) * BSCALE + 40
+  };
+}
+
+function drawBoard() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // Background gradient
+  const grad = ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+  grad.addColorStop(0,'#0d1a0d');
+  grad.addColorStop(1,'#1a0d0d');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Draw background tiles if available
+  const bgTiles = ['tile_back_grass1.png','tile_back_hill1.png','tile_back_mountain1.png','tile_back_mountain2.png','tile_back_water2.png'];
+  // Subtle tiled background
+  if (imgs['tile_back_grass1.png']?.complete) {
+    const tile = imgs['tile_back_grass1.png'];
+    ctx.globalAlpha = 0.15;
+    for (let tx=0; tx<canvas.width; tx+=tile.width*BSCALE) {
+      for (let ty=40; ty<canvas.height; ty+=tile.height*BSCALE) {
+        ctx.drawImage(tile, tx, ty, tile.width*BSCALE, tile.height*BSCALE);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Draw path connections first (lines between spaces)
+  ctx.strokeStyle = 'rgba(201,168,76,0.25)';
+  ctx.lineWidth = 2;
+  const spaceMap = {};
+  BOARD_DATA.spaces.forEach(s => spaceMap[s.i] = s);
+  BOARD_DATA.spaces.forEach(s => {
+    if (s.next === -1) return;
+    const to = spaceMap[s.next];
+    if (!to) return;
+    const a = boardToCanvas(s.x, s.y);
+    const b = boardToCanvas(to.x, to.y);
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  });
+
+  // Draw track images if available
+  const trackOrder = ['track62.png','track59.png','track58.png','track61.png','track60.png',
+    'trackChurch.png','track47.png','track50.png','track91.png','track90.png','track89.png',
+    'track88.png','track87.png','track86.png','track85.png','track81.png','track80.png',
+    'track78.png','track77.png','track76.png','track75.png','track70.png','track69.png',
+    'track68.png','track67.png','track66.png','track65.png','track64.png','track63.png',
+    'track93.png','track92.png','track95.png','track82.png','track46.png','track49.png',
+    'track84.png','track83.png','track48.png','track51.png','track54.png','track52.png',
+    'track71.png','track72.png','track73.png','track74.png','track79.png'];
+
+  // Draw board spaces
+  BOARD_DATA.spaces.forEach(s => {
+    const {x:cx,y:cy} = boardToCanvas(s.x, s.y);
+    const color = SPACE_COLORS[s.type] || '#333';
+    const sz = 14;
+    // Shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(cx-sz/2+1, cy-sz/2+1, sz, sz);
+    // Space box
+    ctx.fillStyle = color;
+    ctx.fillRect(cx-sz/2, cy-sz/2, sz, sz);
+    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(cx-sz/2, cy-sz/2, sz, sz);
+    // Label
+    const label = SPACE_LABELS[s.type] || '';
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = `bold ${4.5*BSCALE}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label.split('\n')[0], cx, cy - (label.includes('\n') ? 2 : 0));
+    if (label.includes('\n')) ctx.fillText(label.split('\n')[1], cx, cy+2.5);
+  });
+
+  // Draw players (cars/pegs)
+  if (G) {
+    G.players.forEach((p, i) => {
+      if (p.retired) return;
+      const sp = BOARD_DATA.spaces.find(s => s.i === p.position);
+      if (!sp) return;
+      const {x:cx,y:cy} = boardToCanvas(sp.x + i*3, sp.y + i*3);
+      const pegImg = imgs[PLAYER_PEGS[i]];
+      if (pegImg?.complete) {
+        const pw = 16*BSCALE, ph = 16*BSCALE;
+        ctx.drawImage(pegImg, cx-pw/2, cy-ph, pw, ph);
+      } else {
+        // Fallback colored dot
+        ctx.beginPath();
+        ctx.arc(cx, cy-6, 6, 0, Math.PI*2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    });
+
+    // Highlight current player's space
+    const cp = G.players[G.currentIdx];
+    if (cp && !cp.retired) {
+      const sp = BOARD_DATA.spaces.find(s => s.i === cp.position);
+      if (sp) {
+        const {x:cx,y:cy} = boardToCanvas(sp.x, sp.y);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 12, 0, Math.PI*2);
+        ctx.strokeStyle = cp.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3,3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+
+  // HUD bar background
+  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+  ctx.fillRect(0,0,canvas.width,40);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0,40); ctx.lineTo(canvas.width,40); ctx.stroke();
+}
+
+// Smooth camera follow
+function updateCamera() {
+  if (!G) return;
+  const cp = G.players[G.currentIdx];
+  if (!cp) return;
+  const sp = BOARD_DATA.spaces.find(s => s.i === cp.position);
+  if (!sp) return;
+  // Target: center current player on screen
+  const targetCamX = sp.x - (canvas.width/BSCALE)/2;
+  const targetCamY = sp.y - (canvas.height-40)/(BSCALE*2);
+  // Clamp camera
+  const boardW = Math.max(...BOARD_DATA.spaces.map(s=>s.x)) + 20;
+  const boardH = Math.max(...BOARD_DATA.spaces.map(s=>s.y)) + 20;
+  camX += (Math.max(0,Math.min(boardW-canvas.width/BSCALE, targetCamX)) - camX) * 0.08;
+  camY += (Math.max(0,Math.min(boardH-(canvas.height-40)/BSCALE, targetCamY)) - camY) * 0.08;
+}
+
+// Main render loop
+let lastTime = 0;
+function gameLoop(ts) {
+  updateCamera();
+  drawBoard();
+  requestAnimationFrame(gameLoop);
+}
+
+// ═══════════════════════════════════════════════════════
+//  HUD
+// ═══════════════════════════════════════════════════════
+function renderHUD() {
+  if (!G) return;
+  const hud = document.getElementById('hud');
+  hud.innerHTML = G.players.map((p,i) => `
+    <div class="hud-player ${i===G.currentIdx&&!G.spinAnimating?'active':''}">
+      <div class="hud-dot" style="background:${p.color}"></div>
+      <span style="max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.name}</span>
+      <span class="hud-cash ${p.cash<0?'neg':''}">${fmt(p.cash)}</span>
+      ${p.retired?'<span style="font-size:10px;color:#666">✓</span>':''}
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════
+//  MESSAGE BOX
+// ═══════════════════════════════════════════════════════
+function showMsg(title, text, buttons) {
+  document.getElementById('msg-title').textContent = title;
+  document.getElementById('msg-text').innerHTML = text;
+  const btnsEl = document.getElementById('msg-btns');
+  btnsEl.innerHTML = '';
+  buttons.forEach(({label, cls='btn', action}) => {
+    const b = document.createElement('button');
+    b.className = cls;
+    b.textContent = label;
+    b.onclick = () => { hideMsg(); action(); };
+    btnsEl.appendChild(b);
+  });
+  document.getElementById('msgbox').classList.add('show');
+}
+function hideMsg() { document.getElementById('msgbox').classList.remove('show'); }
+
+// ═══════════════════════════════════════════════════════
+//  SPINNER
+// ═══════════════════════════════════════════════════════
+function showSpinner() {
+  document.getElementById('spinner-overlay').classList.add('show');
+  G.spinAnimating = true;
+  G.powerBarVal = 0;
+  G.powerBarDir = 1;
+  let displayNum = 1;
+  // Animate display number rapidly
+  const interval = setInterval(() => {
+    displayNum = rnd(10)+1;
+    document.getElementById('spin-num').textContent = displayNum;
+  }, 80);
+  // Animate power bar
+  G.powerBarRAF = () => {
+    G.powerBarVal += G.powerBarDir * 1.5;
+    if (G.powerBarVal >= 100) { G.powerBarVal = 100; G.powerBarDir = -1; }
+    if (G.powerBarVal <= 0)   { G.powerBarVal = 0;   G.powerBarDir = 1;  }
+    document.getElementById('power-fill').style.width = G.powerBarVal + '%';
+    if (G.spinAnimating) requestAnimationFrame(G.powerBarRAF);
+  };
+  requestAnimationFrame(G.powerBarRAF);
+  G._spinInterval = interval;
+
+  return new Promise(resolve => { G.pendingSpinResolve = resolve; });
+}
+
+function doSpin() {
+  if (!G.pendingSpinResolve) return;
+  const result = spin();
+  clearInterval(G._spinInterval);
+  G.spinAnimating = false;
+  document.getElementById('spin-num').textContent = result;
+  document.getElementById('spin-num').style.color = '#e8c96a';
+  playSound(SOUND_MAP.spin);
+  setTimeout(() => {
+    document.getElementById('spinner-overlay').classList.remove('show');
+    document.getElementById('spin-num').style.color = '';
+    const resolve = G.pendingSpinResolve;
+    G.pendingSpinResolve = null;
+    resolve(result);
+  }, 600);
+}
+
+// ═══════════════════════════════════════════════════════
+//  CARD ANIMATION
+// ═══════════════════════════════════════════════════════
+function animCard(imgKey) {
+  return new Promise(resolve => {
+    const el = document.getElementById('card-anim');
+    const img = document.getElementById('card-img');
+    if (imgs[imgKey]?.complete) {
+      img.src = imgs[imgKey].src;
+    } else {
+      img.src = imgs['cardback.png']?.src || '';
+    }
+    el.style.display = 'block';
+    el.style.left = (canvas.offsetLeft + canvas.offsetWidth/2 - 60) + 'px';
+    el.style.top  = (canvas.offsetTop  + canvas.offsetHeight/2 - 80) + 'px';
+    playSound(SOUND_MAP.card);
+    setTimeout(() => { el.style.display = 'none'; resolve(); }, 1200);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  TURN ORDER PHASE
+// ═══════════════════════════════════════════════════════
+async function startTurnOrderPhase() {
+  G.phase = 'turn_order';
+  for (let i = 0; i < G.players.length; i++) {
+    G.currentIdx = i;
+    renderHUD();
+    await new Promise(resolve => {
+      showMsg('Turn Order', `<b>${G.players[i].name}</b>, spin to determine turn order!`, [
+        {label:'Spin!', action: async () => {
+          const s = await showSpinner();
+          G.players[i].turnSpin = s;
+          addLog(`${G.players[i].name} spins ${s} for turn order.`);
+          resolve();
+        }}
+      ]);
+    });
+  }
+  // Sort players by spin desc
+  G.players.sort((a,b) => b.turnSpin - a.turnSpin || a.id - b.id);
+  G.players.forEach((p,i) => p.id = i);
+  addLog(`Turn order: ${G.players.map(p=>p.name).join(' → ')}`);
+  G.currentIdx = 0;
+  startPathChoicePhase();
+}
+
+// ═══════════════════════════════════════════════════════
+//  PATH CHOICE PHASE
+// ═══════════════════════════════════════════════════════
+async function startPathChoicePhase() {
+  G.phase = 'path_choice';
+  for (let i = 0; i < G.players.length; i++) {
+    G.currentIdx = i;
+    renderHUD();
+    const p = G.players[i];
+    await new Promise(resolve => {
+      showMsg('Choose Your Path', `<b>${p.name}</b>, choose your path in life!
+        <br><br>🎓 <b>College</b> — Borrow $100,000. Access high-salary careers.
+        <br>💼 <b>Career</b> — Start earning now. No debt.`, [
+        {label:'🎓 College', action:()=>{ chooseCollege(p); resolve(); }},
+        {label:'💼 Career',  action:()=>{ chooseCareer(p);  resolve(); }},
+      ]);
+    });
+  }
+  G.currentIdx = 0;
+  G.phase = 'playing';
+  playBgm(SOUND_MAP.music_game);
+  await nextTurn();
+}
+
+function chooseCollege(p) {
+  p.college = true;
+  p.loan = 100000;
+  p.career = drawFrom(G.careerDeckCollege) || null;
+  addLog(`${p.name} chose College. Loan: $100,000. Career: ${p.career?.name||'none'}.`);
+  playSound(SOUND_MAP.career);
+}
+function chooseCareer(p) {
+  p.college = false;
+  p.career = drawFrom(G.careerDeckNonCollege) || null;
+  addLog(`${p.name} chose Career: ${p.career?.name||'none'} ($${p.career?.salary?.toLocaleString()||0}/yr).`);
+  playSound(SOUND_MAP.career);
+}
+
+// ═══════════════════════════════════════════════════════
+//  MAIN TURN LOOP
+// ═══════════════════════════════════════════════════════
+async function nextTurn() {
+  if (!G || G.phase !== 'playing') return;
+  const p = G.players[G.currentIdx];
+  renderHUD();
+
+  // Retired players: spin for investments only
+  if (p.retired) {
+    addLog(`${p.name} (retired) spins for investments.`);
+    await new Promise(res => showMsg(`${p.name}'s Turn`, 'You are retired. Spin for Long-Term Investments.', [
+      {label:'Spin', action: async()=>{ const s=await showSpinner(); checkInvestments(s); addLog(`${p.name} spins ${s}.`); res(); }}
+    ]));
+    advanceTurn();
+    return;
+  }
+
+  // Miss turn
+  if (p.missTurn) {
+    p.missTurn = false;
+    addLog(`${p.name} loses their turn.`);
+    showMsg(`${p.name}'s Turn`, 'You have lost a turn!', [{label:'OK', action:()=>advanceTurn()}]);
+    return;
+  }
+
+  // Normal turn
+  await new Promise(res => showMsg(`${p.name}'s Turn`, `Spin the wheel!`, [
+    {label:'Spin!', cls:'btn', action: async()=>{
+      const s = await showSpinner();
+      addLog(`${p.name} spins ${s}.`);
+      checkInvestments(s);
+      await movePlayer(p, s);
+      res();
+    }},
+    {label:'Buy Investment ($10k)', cls:'btn ghost', action: async()=>{
+      buyInvestment(p);
+      // Re-show turn
+      res();
+      await nextTurn(); // redo current player's turn
+    }}
+  ]));
+}
+
+function checkInvestments(spinVal) {
+  G.players.forEach(p => {
+    if (p.investment && p.investment.number === spinVal) {
+      p.cash += 5000;
+      addLog(`${p.name} earns $5,000 from Long-Term Investment (${spinVal})!`);
+      playSound(SOUND_MAP.invest);
+    }
+  });
+  renderHUD();
+}
+
+function buyInvestment(p) {
+  if (p.investment) { showMsg('Already Invested','You already have a Long-Term Investment!', [{label:'OK',action:()=>nextTurn()}]); return; }
+  p.cash -= 10000;
+  p.investment = {number: spin()};
+  addLog(`${p.name} buys investment on #${p.investment.number}.`);
+  playSound(SOUND_MAP.invest);
+  renderHUD();
+}
+
+// ═══════════════════════════════════════════════════════
+//  MOVEMENT
+// ═══════════════════════════════════════════════════════
+async function movePlayer(p, spaces) {
+  const spaceMap = {};
+  BOARD_DATA.spaces.forEach(s => spaceMap[s.i] = s);
+
+  let pos = p.position;
+  for (let step = 0; step < spaces; step++) {
+    const cur = spaceMap[pos];
+    if (!cur || cur.next === -1) { pos = cur?.i || pos; break; }
+    const nxt = spaceMap[cur.next];
+    if (!nxt) break;
+
+    // Payday on pass-through (not on final landing)
+    if (step < spaces-1 && nxt.type === 'PD') {
+      const sal = p.career?.salary || 0;
+      if (sal > 0) { p.cash += sal; addLog(`${p.name} passes Payday +${fmt(sal)}.`); }
+    }
+
+    pos = nxt.i;
+    p.position = pos;
+    renderHUD();
+    // Small delay for movement animation feel
+    await delay(80);
+  }
+  p.position = pos;
+  renderHUD();
+  await delay(200);
+  await resolveLanding(p, spaceMap[pos]);
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ═══════════════════════════════════════════════════════
+//  SPACE RESOLUTION
+// ═══════════════════════════════════════════════════════
+async function resolveLanding(p, space) {
+  if (!space) { advanceTurn(); return; }
+  const type = space.type;
+
+  switch(type) {
+    case 'PD': {
+      const sal = p.career?.salary || 0;
+      p.cash += sal;
+      addLog(`${p.name} lands on Payday! Collects ${fmt(sal)}.`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      await showOk(`Payday! 💰`,`${p.name} collects ${fmt(sal)}!`);
+      advanceTurn(); break;
+    }
+    case 'PB': {
+      p.cash += space.value;
+      addLog(`${p.name} collects ${fmt(space.value)}.`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      // Offer STW to other players
+      await showOk(`Collect ${fmt(space.value)} 💰`,`${p.name} collects ${fmt(space.value)} from the bank!`);
+      advanceTurn(); break;
+    }
+    case 'CB': {
+      p.cash += space.value;
+      addLog(`${p.name} earns career bonus ${fmt(space.value)}.`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      await showOk(`Career Bonus! ⭐`,`${p.name} earns ${fmt(space.value)}.`);
+      advanceTurn(); break;
+    }
+    case 'TX': {
+      if (space.value === -1) {
+        p.cash += 20000;
+        addLog(`${p.name} gets a tax refund! +$20,000.`);
+        playSound(SOUND_MAP.collect);
+        renderHUD();
+        await showOk('Tax Refund! 🎉', `${p.name} receives a $20,000 tax refund!`);
+      } else {
+        p.cash -= space.value;
+        addLog(`${p.name} pays taxes: ${fmt(space.value)}.`);
+        playSound(SOUND_MAP.pay);
+        renderHUD();
+        await showOk('Taxes Due 😬', `${p.name} pays ${fmt(space.value)} in taxes.`);
+      }
+      advanceTurn(); break;
+    }
+    case 'LF': case 'LS': {
+      const tile = drawLifeTile(p);
+      addLog(`${p.name} draws a Life Tile. (${p.lifeTiles.length} total)`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      await showOk('Life Tile! 🀄', `${p.name} draws a Life Tile worth a secret amount.`);
+      advanceTurn(); break;
+    }
+    case 'LJ': {
+      const card = drawFrom(G.actionDeck);
+      if (!card) { advanceTurn(); return; }
+      addLog(`${p.name} draws: "${card.text}"`);
+      await animCard('cardback.png');
+      await resolveActionCard(p, card);
+      break;
+    }
+    case 'BB': {
+      const kind = space.value; // 0=boy,1=girl,2=twins
+      const count = kind === 2 ? 2 : 1;
+      p.children += count;
+      const label = kind===2 ? 'Twins! 👶👶' : kind===1 ? 'Baby Girl! 👶' : 'Baby Boy! 👶';
+      let gifts = 0;
+      G.players.forEach(o => { if(o.id!==p.id){ o.cash-=5000; p.cash+=5000; gifts+=5000; }});
+      addLog(`${p.name} has ${kind===2?'twins':'a baby'}! Receives ${fmt(gifts)} in baby gifts.`);
+      playSound(SOUND_MAP.baby);
+      renderHUD();
+      await showOk(label, `Each other player paid $5,000 baby gift to ${p.name}!`);
+      advanceTurn(); break;
+    }
+    case 'S2': {
+      await spinToWin(p); break;
+    }
+    case 'PR': {
+      if (p.career) {
+        const old = p.career.salary;
+        p.career = {...p.career, salary: p.career.maxSalary===-1 ? old+p.career.raise : Math.min(old+p.career.raise,p.career.maxSalary)};
+        addLog(`${p.name} promoted! Salary: ${fmt(p.career.salary)}/yr.`);
+        playSound(SOUND_MAP.promotion);
+        renderHUD();
+        await showOk('Promotion! 🎉', `${p.name}'s salary is now ${fmt(p.career.salary)}/yr!`);
+      }
+      advanceTurn(); break;
+    }
+    case 'CC': {
+      const deck = p.college ? G.careerDeckCollege : G.careerDeckNonCollege;
+      const nc = drawFrom(deck);
+      if (nc) { if(p.career) deck.push({...p.career}); p.career=nc; }
+      addLog(`${p.name} changes career to ${p.career?.name||'none'}.`);
+      playSound(SOUND_MAP.career);
+      renderHUD();
+      await showOk('Career Change! 💼', `${p.name} is now a ${p.career?.name||'?'} earning ${fmt(p.career?.salary||0)}/yr.`);
+      advanceTurn(); break;
+    }
+    case 'GM': {
+      if (!p.married) {
+        p.married = true;
+        const s = spin();
+        const gift = s * 5000;
+        G.players.forEach(o => { if(o.id!==p.id){ o.cash-=gift; p.cash+=gift; }});
+        addLog(`${p.name} gets married! Wedding gifts: ${fmt(gift * (G.players.length-1))}.`);
+        playSound(SOUND_MAP.married);
+        renderHUD();
+        await showOk('💒 Get Married!', `${p.name} is married! Spins ${s} — each player pays ${fmt(gift)}.`);
+      }
+      advanceTurn(); break;
+    }
+    case 'BH': {
+      await buyBetterHome(p); break;
+    }
+    case 'OC': {
+      // Daycare + new career
+      if (p.children > 0) {
+        G.players.forEach(o => {
+          if (o.id !== p.id) {
+            const pay = 5000*o.children;
+            if(pay>0){ o.cash-=pay; p.cash+=pay; addLog(`${o.name} pays ${fmt(pay)} daycare.`); }
+          }
+        });
+      }
+      const allDecks = [...G.careerDeckCollege,...G.careerDeckNonCollege];
+      const nc2 = allDecks.length ? drawFrom(allDecks) : null;
+      if (nc2) { p.career = nc2; }
+      renderHUD();
+      await showOk('Occupation Change! 👔', `${p.name} changes to ${p.career?.name||'?'}.`);
+      advanceTurn(); break;
+    }
+    case 'SH': case 'SW': {
+      const newCards = [rnd(5)];
+      p.stwCards.push(...newCards);
+      addLog(`${p.name} gains Share the Wealth cards.`);
+      renderHUD();
+      await showOk('Share the Wealth! 🎴', `${p.name} receives STW cards.`);
+      advanceTurn(); break;
+    }
+    case 'PC': case 'BR': {
+      // Path fork
+      await new Promise(res => {
+        showMsg('Fork in the Road! 🔀',
+          `Choose your path. The top path is free. The lower path costs ${fmt(space.value||5000)}.`,
+          [
+            {label:'Free Path', action:()=>res()},
+            {label:`Pay ${fmt(space.value||5000)}`, cls:'btn red', action:()=>{ p.cash-=(space.value||5000); renderHUD(); res(); }},
+          ]
+        );
+      });
+      advanceTurn(); break;
+    }
+    case 'PN': {
+      // Pension
+      const ps = spin();
+      const pension = (p.career?.salary||0) * ps;
+      p.cash += pension;
+      addLog(`${p.name} collects pension: salary × ${ps} = ${fmt(pension)}.`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      await showOk('Pension! 🏦', `${p.name} spins ${ps}. Pension: ${fmt(pension)}!`);
+      await retirementChoice(p); break;
+    }
+    case 'RT': {
+      await retirementChoice(p); break;
+    }
+    default:
+      advanceTurn();
+  }
+}
+
+function showOk(title, text) {
+  return new Promise(res => showMsg(title, text, [{label:'OK', action:res}]));
+}
+
+// ═══════════════════════════════════════════════════════
+//  ACTION CARDS
+// ═══════════════════════════════════════════════════════
+async function resolveActionCard(p, card) {
+  switch(card.type) {
+    case 'pay':
+      p.cash -= card.amount;
+      addLog(`${p.name} pays ${fmt(card.amount)}.`);
+      playSound(SOUND_MAP.pay);
+      renderHUD();
+      await showOk('Action Card 🃏', card.text);
+      advanceTurn(); break;
+    case 'collect':
+      p.cash += card.amount;
+      addLog(`${p.name} collects ${fmt(card.amount)}.`);
+      playSound(SOUND_MAP.collect);
+      renderHUD();
+      await showOk('Action Card 🃏', card.text);
+      advanceTurn(); break;
+    case 'pay_child': {
+      const total = card.base + card.perChild * p.children;
+      p.cash -= total;
+      addLog(`${p.name} pays ${fmt(total)}.`);
+      playSound(SOUND_MAP.pay);
+      renderHUD();
+      await showOk('Action Card 🃏', `${card.text}\n Total: ${fmt(total)}.`);
+      advanceTurn(); break;
+    }
+    case 'career_change': {
+      const deck = p.college ? G.careerDeckCollege : G.careerDeckNonCollege;
+      const nc = drawFrom(deck); if(nc){ if(p.career) deck.push({...p.career}); p.career=nc; }
+      addLog(`${p.name} new career: ${p.career?.name}.`);
+      renderHUD();
+      await showOk('New Career! 💼', `${card.text} ${p.name} is now a ${p.career?.name||'?'}.`);
+      advanceTurn(); break;
+    }
+    case 'lawsuit': {
+      const others = G.players.filter(o => o.id!==p.id && !o.retired);
+      if (!others.length) { advanceTurn(); return; }
+      await new Promise(res => {
+        showMsg('⚖️ LAWSUIT!', `${p.name} sues another player for $100,000! Choose target:`,
+          others.map(o => ({
+            label: o.name, cls:'btn red',
+            action: () => {
+              const ex = o.stwCards.indexOf(2);
+              if (ex !== -1) {
+                o.stwCards.splice(ex,1);
+                addLog(`${o.name} uses Exemption card! Lawsuit blocked.`);
+                showOk('Exemption!','The target used their Exemption card and blocked the lawsuit.').then(res);
+              } else {
+                o.cash -= 100000; p.cash += 100000;
+                addLog(`${p.name} sues ${o.name} for $100,000!`);
+                renderHUD();
+                showOk('Lawsuit! ⚖️',`${p.name} collects $100,000 from ${o.name}!`).then(res);
+              }
+            }
+          }))
+        );
+      });
+      advanceTurn(); break;
+    }
+    case 'stw_move':
+      await spinToWin(p); break;
+    case 'spin_again':
+      addLog(`${p.name} spins again!`);
+      await showOk('Spin Again! 🎲','You get to spin again!');
+      await new Promise(res => showMsg('Spin Again!','Spin the wheel!', [
+        {label:'Spin!', action: async()=>{
+          const s = await showSpinner();
+          addLog(`${p.name} spins again: ${s}.`);
+          checkInvestments(s);
+          await movePlayer(p,s);
+          res();
+        }}
+      ]));
+      break;
+    case 'miss_turn':
+      p.missTurn = true;
+      addLog(`${p.name} will miss their next turn.`);
+      await showOk('Miss Next Turn 😔', card.text);
+      advanceTurn(); break;
+    case 'gain_stw':
+      p.stwCards.push(rnd(5));
+      addLog(`${p.name} gains an STW card.`);
+      renderHUD();
+      await showOk('Share the Wealth Card! 🎴', card.text);
+      advanceTurn(); break;
+    case 'raise':
+      if(p.career) p.career={...p.career,salary:p.career.salary+card.amount};
+      addLog(`${p.name} gets ${fmt(card.amount)} raise.`);
+      renderHUD();
+      await showOk('Pay Raise! 💵', card.text);
+      advanceTurn(); break;
+    case 'daycare': {
+      G.players.forEach(o => {
+        if(o.id!==p.id){ const pay=5000*o.children; if(pay>0){o.cash-=pay;p.cash+=pay;}}
+      });
+      addLog(`${p.name} runs daycare!`);
+      renderHUD();
+      await showOk('Open Daycare! 🏫', card.text);
+      advanceTurn(); break;
+    }
+    case 'career_or_raise': {
+      await new Promise(res => {
+        showMsg('Career or Raise? 💼', card.text, [
+          {label:`+${fmt(card.amount)} Raise`, action:()=>{
+            if(p.career) p.career={...p.career,salary:p.career.salary+card.amount};
+            addLog(`${p.name} takes ${fmt(card.amount)} raise.`);
+            renderHUD(); res();
+          }},
+          {label:'New Career', cls:'btn ghost', action:()=>{
+            const deck=p.college?G.careerDeckCollege:G.careerDeckNonCollege;
+            const nc=drawFrom(deck); if(nc){if(p.career)deck.push({...p.career});p.career=nc;}
+            addLog(`${p.name} changes career to ${p.career?.name}.`);
+            renderHUD(); res();
+          }},
+        ]);
+      });
+      advanceTurn(); break;
+    }
+    default:
+      await showOk('Action Card 🃏', card.text);
+      advanceTurn();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SPIN TO WIN
+// ═══════════════════════════════════════════════════════
+async function spinToWin(p) {
+  // Determine how many numbers player can pick
+  let slots = 1;
+  if (p.stwCards.includes(4)) slots = 4;
+  else if (p.stwCards.includes(3)) slots = 2;
+
+  let wager = 5000;
+  let selected = [];
+
+  // Ask if they want to play
+  const play = await new Promise(res => {
+    showMsg('🎰 Spin to Win!',
+      `Do you want to gamble? Pick up to ${slots} number(s) and wager.`,
+      [
+        {label:'Play!',   action:()=>res(true)},
+        {label:'Skip',    cls:'btn ghost', action:()=>res(false)},
+      ]
+    );
+  });
+  if (!play) { addLog(`${p.name} skips Spin to Win.`); advanceTurn(); return; }
+
+  // Number picking UI
+  await new Promise(res => {
+    const btns = document.getElementById('msg-btns');
+    document.getElementById('msg-title').textContent = '🎰 Choose Number(s) & Wager';
+    document.getElementById('msg-text').innerHTML = `
+      <div id="num-picker">
+        ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="num-btn" id="nb${n}" onclick="toggleNum(${n},${slots})">${n}</button>`).join('')}
+      </div>
+      <div style="margin:8px 0;font-size:12px;color:#888">Wager: $<span id="wager-val">5000</span></div>
+      <input type="range" id="wager-slider" min="5000" max="50000" step="5000" value="5000"
+             oninput="document.getElementById('wager-val').textContent=Number(this.value).toLocaleString()">
+    `;
+    btns.innerHTML = '';
+    const go = document.createElement('button');
+    go.className = 'btn'; go.textContent = 'Spin!';
+    go.onclick = () => {
+      selected = [...window._stwSelected||[]];
+      wager = parseInt(document.getElementById('wager-slider').value)||5000;
+      if (!selected.length) { selected=[rnd(10)+1]; }
+      hideMsg(); res();
+    };
+    btns.appendChild(go);
+    window._stwSelected = [];
+    document.getElementById('msgbox').classList.add('show');
+  });
+
+  // Spin
+  const s = await showSpinner();
+  checkInvestments(s);
+  const won = selected.includes(s);
+  if (won) {
+    p.cash += wager;
+    addLog(`${p.name} wins ${fmt(wager)} in Spin to Win! (spun ${s})`);
+    playSound(SOUND_MAP.win);
+  } else {
+    p.cash -= wager;
+    addLog(`${p.name} loses ${fmt(wager)} in Spin to Win. (spun ${s})`);
+    playSound(SOUND_MAP.pay);
+  }
+  renderHUD();
+  await showOk(won?'You Won! 🎉':'You Lost 😔',
+    `${p.name} spun ${s}. ${won?`Wins ${fmt(wager)}!`:`Loses ${fmt(wager)}.`}`);
+  advanceTurn();
+}
+
+// Global toggle for number picker
+window.toggleNum = function(n, slots) {
+  if (!window._stwSelected) window._stwSelected = [];
+  const idx = window._stwSelected.indexOf(n);
+  const btn = document.getElementById('nb'+n);
+  if (idx !== -1) {
+    window._stwSelected.splice(idx,1);
+    btn.classList.remove('sel');
+  } else {
+    if (window._stwSelected.length >= slots) {
+      const removed = window._stwSelected.shift();
+      document.getElementById('nb'+removed)?.classList.remove('sel');
+    }
+    window._stwSelected.push(n);
+    btn.classList.add('sel');
+  }
+};
+
+// ═══════════════════════════════════════════════════════
+//  HOME BUYING
+// ═══════════════════════════════════════════════════════
+async function buyBetterHome(p) {
+  if (!p.house) {
+    const h = drawFrom(G.houseDeckStarter);
+    if (h) {
+      p.cash -= h.buy; p.house = h;
+      addLog(`${p.name} buys ${h.name} for ${fmt(h.buy)}.`);
+      renderHUD();
+      await showOk('New Home! 🏠', `${p.name} buys ${h.name} for ${fmt(h.buy)}.`);
+    }
+    advanceTurn(); return;
+  }
+  await new Promise(res => {
+    showMsg('Buy a Better Home? 🏠',
+      `${p.name} currently owns <b>${p.house.name}</b>. Trade up?`,
+      [
+        {label:'Yes, upgrade!', action: async()=>{
+          const sellVal = p.house.sell===-1 ? spin()*Math.floor(p.house.buy/5) : p.house.sell;
+          p.cash += sellVal;
+          addLog(`${p.name} sells ${p.house.name} for ${fmt(sellVal)}.`);
+          const nh = drawFrom(G.houseDeckPremium) || drawFrom(G.houseDeckStarter);
+          if (nh) { p.cash-=nh.buy; p.house=nh; addLog(`Buys ${nh.name} for ${fmt(nh.buy)}.`); }
+          renderHUD(); res();
+        }},
+        {label:'No thanks', cls:'btn ghost', action:()=>res()},
+      ]
+    );
+  });
+  advanceTurn();
+}
+
+// ═══════════════════════════════════════════════════════
+//  LIFE TILES
+// ═══════════════════════════════════════════════════════
+function drawLifeTile(p) {
+  if (G.lifeTiles.length > 0) {
+    p.lifeTiles.push(G.lifeTiles.pop());
+    return;
+  }
+  // Steal from Millionaire Estates retirees
+  const victim = G.players.find(o => o.retired && o.retiredAt==='estates' && o.lifeTiles.length>0);
+  if (victim) {
+    const v = victim.lifeTiles.pop();
+    p.lifeTiles.push(v);
+    addLog(`${p.name} steals a Life Tile from ${victim.name}!`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+//  RETIREMENT
+// ═══════════════════════════════════════════════════════
+async function retirementChoice(p) {
+  await new Promise(res => {
+    showMsg('🏖 Time to Retire!',
+      `<b>${p.name}</b>, choose where to spend your golden years.<br><br>
+       🏰 <b>Millionaire Estates</b> — Bonus Life Tile. Tiles can be stolen.<br>
+       🌾 <b>Countryside Acres</b> — No bonus. Tiles are protected.`,
+      [
+        {label:'🏰 Millionaire Estates', action:()=>{
+          p.retired=true; p.retiredAt='estates';
+          const tile = G.estatesTiles.shift();
+          if (tile!==undefined) p.lifeTiles.push(tile);
+          addLog(`${p.name} retires to Millionaire Estates.`);
+          res();
+        }},
+        {label:'🌾 Countryside Acres', cls:'btn ghost', action:()=>{
+          p.retired=true; p.retiredAt='acres';
+          addLog(`${p.name} retires to Countryside Acres.`);
+          res();
+        }},
+      ]
+    );
+  });
+  // Children gift
+  const childGift = p.children * 10000;
+  if (childGift>0) { p.cash+=childGift; addLog(`${p.name} receives ${fmt(childGift)} children's gifts.`); }
+  playSound(SOUND_MAP.retire);
+  renderHUD();
+
+  if (G.players.every(pl=>pl.retired)) {
+    endGame(); return;
+  }
+  advanceTurn();
+}
+
+// ═══════════════════════════════════════════════════════
+//  ADVANCE TURN
+// ═══════════════════════════════════════════════════════
+function advanceTurn() {
+  if (!G) return;
+  if (G.players.every(p=>p.retired)) { endGame(); return; }
+  G.currentIdx = (G.currentIdx+1) % G.players.length;
+  renderHUD();
+  setTimeout(nextTurn, 300);
+}
+
+// ═══════════════════════════════════════════════════════
+//  ENDGAME
+// ═══════════════════════════════════════════════════════
+function endGame() {
+  G.phase = 'endgame';
+  stopBgm();
+  playSound(SOUND_MAP.gameover);
+
+  G.players.forEach(p => {
+    let houseVal = 0;
+    if (p.house) {
+      houseVal = p.house.sell===-1 ? spin()*Math.floor(p.house.buy/5) : p.house.sell;
+    }
+    const tileSum = p.lifeTiles.reduce((s,v)=>s+v,0);
+    const loan    = Math.floor(p.loan * 1.1);
+    p.netWorth    = p.cash + houseVal + tileSum + (p.children*10000) - loan;
+    p._houseVal   = houseVal;
+    p._tileSum    = tileSum;
+  });
+
+  const sorted = [...G.players].sort((a,b)=>b.netWorth-a.netWorth);
+
+  const ranks = document.getElementById('endgame-ranks');
+  const medals = ['🥇','🥈','🥉','4th'];
+  ranks.innerHTML = sorted.map((p,i)=>`
+    <div class="rank-row ${i===0?'first':''}">
+      <div class="rank-num">${medals[i]||i+1}</div>
+      <div class="rank-info">
+        <div class="rank-name" style="color:${p.color}">${p.name}</div>
+        <div class="rank-worth">$${p.netWorth.toLocaleString()}</div>
+        <div class="rank-detail">
+          Cash: $${p.cash.toLocaleString()} &nbsp;·&nbsp;
+          House: $${p._houseVal.toLocaleString()} &nbsp;·&nbsp;
+          Tiles: $${p._tileSum.toLocaleString()} &nbsp;·&nbsp;
+          Children: ${p.children}
+          ${p.loan ? ` &nbsp;·&nbsp; Loan: -$${Math.floor(p.loan*1.1).toLocaleString()}` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('endgame').classList.add('show');
+}
+
+// ═══════════════════════════════════════════════════════
+//  SETUP SCREEN
+// ═══════════════════════════════════════════════════════
+const activePlayers = [true, true, false, false];
+function togglePlayer(i) {
+  activePlayers[i] = !activePlayers[i];
+  const inp = document.getElementById(`p${i}name`);
+  const tog = document.getElementById(`tog${i}`);
+  inp.disabled = !activePlayers[i];
+  if (activePlayers[i]) { inp.value=`Player ${i+1}`; tog.textContent='✕ Remove'; tog.classList.add('on'); }
+  else { inp.value=''; tog.textContent='+ Add'; tog.classList.remove('on'); }
+}
+
+function startGame() {
+  const names = [];
+  for (let i=0;i<4;i++) {
+    if (!activePlayers[i]) continue;
+    const n = document.getElementById(`p${i}name`).value.trim();
+    if (n) names.push(n);
+  }
+  if (names.length < 2) { alert('Need at least 2 players!'); return; }
+  document.getElementById('setup').classList.add('hide');
+  playBgm(SOUND_MAP.music_title);
+  initGame(names);
+}
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+window.addEventListener('load', async () => {
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Load assets
+  await loadAssets();
+  setupSplash();
+
+  // Start render loop
+  requestAnimationFrame(gameLoop);
+
+  // Unlock audio on first click
+  document.addEventListener('click', () => { ensureAudio(); }, {once:true});
+});
+</script>
+</body>
+</html>
